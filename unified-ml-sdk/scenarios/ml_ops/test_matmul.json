@@ -1,0 +1,44 @@
+{
+    "commands": [{
+        "dispatch_compute": {
+            "bindings": [
+                {"id": 0, "set": 0, "resource_ref": "matrix_a"},
+                {"id": 1, "set": 0, "resource_ref": "matrix_b"},
+                {"id": 2, "set": 0, "resource_ref": "matrix_c"}
+            ],
+            "rangeND": [64, 64],
+            "shader_ref": "matmul"
+        }
+    }],
+    "resources": [
+        {
+            "shader": {
+                "entry": "main",
+                "src": "../../shaders/matmul.spv",
+                "type": "SPIR-V",
+                "uid": "matmul"
+            }
+        },
+        {
+            "buffer": {
+                "shader_access": "readonly",
+                "size": 16384,
+                "uid": "matrix_a"
+            }
+        },
+        {
+            "buffer": {
+                "shader_access": "readonly",
+                "size": 16384,
+                "uid": "matrix_b"
+            }
+        },
+        {
+            "buffer": {
+                "shader_access": "writeonly",
+                "size": 16384,
+                "uid": "matrix_c"
+            }
+        }
+    ]
+}

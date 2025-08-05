@@ -1,0 +1,271 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2023-2025 Arm Limited and/or its affiliates <open-source-office@arm.com>
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
+#extension GL_ARM_tensors : enable
+
+// Maximum supported rank
+#define RANK_MAX 6
+
+#define NAN (0.0 / 0.0)
+#define PI 3.141592653589793238462643383279502884197
+
+// NAN Modes
+#define NAN_MODE_PROPAGATE 1
+#define NAN_MODE_IGNORE 2
+
+// Types
+#define TYPE_BOOL 0x6231   // "b1"
+#define TYPE_INT8 0x6931   // "i1"
+#define TYPE_INT16 0x6932  // "i2"
+#define TYPE_INT32 0x6934  // "i4"
+#define TYPE_INT64 0x6938  // "i8"
+#define TYPE_HALF 0x6632   // "f2"
+#define TYPE_FLOAT 0x6634  // "f4"
+#define TYPE_DOUBLE 0x6638 // "f8"
+
+#define IS_BOOL(t) (t == TYPE_BOOL)
+#define IS_INTEGER(t) ((t >> 8) == 0x69)
+#define IS_FLOAT(t) ((t >> 8) == 0x66)
+
+#define applyBroadcast(shape, index, coords)                                                                           \
+    {                                                                                                                  \
+        for (int i = int(shape.length() - 1); i >= 0; i--) {                                                           \
+            coords[i] = index[i];                                                                                      \
+            if (shape[i] == 1) {                                                                                       \
+                coords[i] = 0;                                                                                         \
+            }                                                                                                          \
+        }                                                                                                              \
+    }
+
+#define offsetToIndex(shape, offset, index)                                                                            \
+    {                                                                                                                  \
+        uint off = offset;                                                                                             \
+        for (int i = int(index.length() - 1); i >= 0; i--) {                                                           \
+            index[i] = off % shape[i];                                                                                 \
+            off /= shape[i];                                                                                           \
+        }                                                                                                              \
+                                                                                                                       \
+        if (off > 0) {                                                                                                 \
+            return;                                                                                                    \
+        }                                                                                                              \
+    }
+
+#define getShape(shape, tensorARM)                                                                                     \
+    {                                                                                                                  \
+        if (shape.length() == 6) {                                                                                     \
+            shape[0] = tensorSizeARM(tensorARM, 0);                                                                    \
+            shape[1] = tensorSizeARM(tensorARM, 1);                                                                    \
+            shape[2] = tensorSizeARM(tensorARM, 2);                                                                    \
+            shape[3] = tensorSizeARM(tensorARM, 3);                                                                    \
+            shape[4] = tensorSizeARM(tensorARM, 4);                                                                    \
+            shape[5] = tensorSizeARM(tensorARM, 5);                                                                    \
+        } else if (shape.length() == 5) {                                                                              \
+            shape[0] = tensorSizeARM(tensorARM, 0);                                                                    \
+            shape[1] = tensorSizeARM(tensorARM, 1);                                                                    \
+            shape[2] = tensorSizeARM(tensorARM, 2);                                                                    \
+            shape[3] = tensorSizeARM(tensorARM, 3);                                                                    \
+            shape[4] = tensorSizeARM(tensorARM, 4);                                                                    \
+        } else if (shape.length() == 4) {                                                                              \
+            shape[0] = tensorSizeARM(tensorARM, 0);                                                                    \
+            shape[1] = tensorSizeARM(tensorARM, 1);                                                                    \
+            shape[2] = tensorSizeARM(tensorARM, 2);                                                                    \
+            shape[3] = tensorSizeARM(tensorARM, 3);                                                                    \
+        } else if (shape.length() == 3) {                                                                              \
+            shape[0] = tensorSizeARM(tensorARM, 0);                                                                    \
+            shape[1] = tensorSizeARM(tensorARM, 1);                                                                    \
+            shape[2] = tensorSizeARM(tensorARM, 2);                                                                    \
+        } else if (shape.length() == 2) {                                                                              \
+            shape[0] = tensorSizeARM(tensorARM, 0);                                                                    \
+            shape[1] = tensorSizeARM(tensorARM, 1);                                                                    \
+        } else if (shape.length() == 1) {                                                                              \
+            shape[0] = tensorSizeARM(tensorARM, 0);                                                                    \
+        }                                                                                                              \
+    }
+
+#define getIndex(tensorARM, index)                                                                                     \
+    {                                                                                                                  \
+        const uint offset =                                                                                            \
+            gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;               \
+                                                                                                                       \
+        uint[index.length()] shape;                                                                                    \
+        getShape(shape, tensorARM);                                                                                    \
+                                                                                                                       \
+        offsetToIndex(shape, offset, index);                                                                           \
+    }
+
+#define getIndex2(tensorARM, index)                                                                                    \
+    {                                                                                                                  \
+        const uint offset =                                                                                            \
+            gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;               \
+                                                                                                                       \
+        uint[index.length()] shape;                                                                                    \
+        shape[0] = tensorSizeARM(tensorARM, 0);                                                                        \
+        shape[1] = tensorSizeARM(tensorARM, 1);                                                                        \
+                                                                                                                       \
+        offsetToIndex(shape, offset, index);                                                                           \
+    }
+
+#define getIndex3(tensorARM, index)                                                                                    \
+    {                                                                                                                  \
+        const uint offset =                                                                                            \
+            gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;               \
+                                                                                                                       \
+        uint[index.length()] shape;                                                                                    \
+        shape[0] = tensorSizeARM(tensorARM, 0);                                                                        \
+        shape[1] = tensorSizeARM(tensorARM, 1);                                                                        \
+        shape[2] = tensorSizeARM(tensorARM, 2);                                                                        \
+                                                                                                                       \
+        offsetToIndex(shape, offset, index);                                                                           \
+    }
+
+#define getIndex4(tensorARM, index)                                                                                    \
+    {                                                                                                                  \
+        const uint offset =                                                                                            \
+            gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;               \
+                                                                                                                       \
+        uint[index.length()] shape;                                                                                    \
+        shape[0] = tensorSizeARM(tensorARM, 0);                                                                        \
+        shape[1] = tensorSizeARM(tensorARM, 1);                                                                        \
+        shape[2] = tensorSizeARM(tensorARM, 2);                                                                        \
+        shape[3] = tensorSizeARM(tensorARM, 3);                                                                        \
+                                                                                                                       \
+        offsetToIndex(shape, offset, index);                                                                           \
+    }
+
+#define getIndex5(tensorARM, index)                                                                                    \
+    {                                                                                                                  \
+        const uint offset =                                                                                            \
+            gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;               \
+                                                                                                                       \
+        uint[index.length()] shape;                                                                                    \
+        shape[0] = tensorSizeARM(tensorARM, 0);                                                                        \
+        shape[1] = tensorSizeARM(tensorARM, 1);                                                                        \
+        shape[2] = tensorSizeARM(tensorARM, 2);                                                                        \
+        shape[3] = tensorSizeARM(tensorARM, 3);                                                                        \
+        shape[4] = tensorSizeARM(tensorARM, 4);                                                                        \
+                                                                                                                       \
+        offsetToIndex(shape, offset, index);                                                                           \
+    }
+/*
+ * SPDX-FileCopyrightText: Copyright 2023-2025 Arm Limited and/or its affiliates <open-source-office@arm.com>
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#define IN_T %in_t%
+#define OUT_T %out_t%
+#define TYPE_IN %in_t_type%
+
+layout(local_size_x = %warpX%) in;
+
+layout(push_constant) uniform PushConstants {
+    uint nanMode;
+} pushConstants;
+
+layout(constant_id = 0) const uint32_t RANK_IN = RANK_MAX;
+layout(constant_id = 1) const uint32_t RANK_OUT = RANK_MAX;
+
+layout(set = 0, binding = 0) uniform tensorARM<OUT_T, RANK_OUT> outputData;
+layout(set = 1, binding = 0) uniform tensorARM<IN_T, RANK_IN> inputData1;
+layout(set = 2, binding = 0) uniform tensorARM<IN_T, RANK_IN> inputData2;
+
+uint zeroExtend(int8_t v) { return uint8_t(v); }
+
+uint zeroExtend(int16_t v) { return uint16_t(v); }
+
+uint zeroExtend(int32_t v) { return v; }
+
+// I don't think min or max will ever actually be used with bool inputs, but `applyMax` and `applyMin` are always
+// defined. Since builtin min and max do not support bool inputs, we define them here.
+bool min(bool a, bool b){
+    return a && b;
+}
+
+bool max(bool a, bool b){
+    return a || b;
+}
+
+#if IS_FLOAT(TYPE_IN)
+OUT_T power(IN_T base, IN_T exponent) {
+    // Positive numbers can be passed directly to pow()
+    if (base >= IN_T(0)) {
+        return OUT_T(pow(base, exponent));
+    }
+    // Most ICD produce NaN for all negative numbers, whereas we want to handle
+    // the special cases where then exponent is power of 1.0 or power of 2.0
+    else {
+        // If exponent is power of 2.0, then output should be a positive number
+        if (mod(exponent, IN_T(2.0)) == 0.0) {
+            return OUT_T(pow(-base, exponent));
+        }
+        // If exponent is power of 1.0, then output should be a negative number
+        else if (mod(exponent, IN_T(1.0)) == 0.0) {
+            return OUT_T(-pow(-base, exponent));
+        }
+        // Else output should be NaN
+        else {
+            return OUT_T(NAN);
+        }
+    }
+}
+#endif
+
+OUT_T applyMin(IN_T a, IN_T b, uint nanMode)
+{
+#if IS_FLOAT(TYPE_IN)
+    if (isnan(a)) {
+        return nanMode == NAN_MODE_PROPAGATE ? OUT_T(a) : OUT_T(b);
+    }
+    else if (isnan(b)) {
+        return nanMode == NAN_MODE_PROPAGATE ? OUT_T(b) : OUT_T(a);
+    }
+#endif
+
+    return OUT_T(min(a, b));
+}
+
+OUT_T applyMax(IN_T a, IN_T b, uint nanMode)
+{
+#if IS_FLOAT(TYPE_IN)
+    if (isnan(a)) {
+        return nanMode == NAN_MODE_PROPAGATE ? OUT_T(a) : OUT_T(b);
+    }
+    else if (isnan(b)) {
+        return nanMode == NAN_MODE_PROPAGATE ? OUT_T(b) : OUT_T(a);
+    }
+#endif
+
+    return OUT_T(max(a, b));
+}
+
+void main() {
+    uint[RANK_OUT] index;
+    getIndex(outputData, index);
+
+    // Input 1 tensorARM
+    uint[RANK_IN] inputShape1;
+    uint[RANK_IN] inputIndex1;
+    IN_T value1;
+
+    getShape(inputShape1, inputData1);
+    applyBroadcast(inputShape1, index, inputIndex1);
+    tensorReadARM(inputData1, inputIndex1, value1);
+
+    // Input 2 tensorARM
+    uint[RANK_IN] inputShape2;
+    uint[RANK_IN] inputIndex2;
+    IN_T value2;
+
+    getShape(inputShape2, inputData2);
+    applyBroadcast(inputShape2, index, inputIndex2);
+    tensorReadARM(inputData2, inputIndex2, value2);
+
+    // Output
+    OUT_T value;
+    value = OUT_T(%operation%);
+
+    tensorWriteARM(outputData, index, value);
+}

@@ -1,0 +1,30 @@
+{
+    "commands": [{
+        "dispatch_compute": {
+            "bindings": [
+                {"id": 0, "set": 0, "resource_ref": "data"}
+            ],
+            "rangeND": [1024],
+            "shader_ref": "relu_shader"
+        }
+    }],
+    "resources": [
+        {
+            "shader": {
+                "entry": "main",
+                "src": "../shaders/relu.spv",
+                "type": "SPIR-V",
+                "uid": "relu_shader"
+            }
+        },
+        {
+            "buffer": {
+                "shader_access": "readwrite",
+                "size": 4096,
+                "src": "../data/rand_small.npy",
+                "dst": "../results/relu_result.npy",
+                "uid": "data"
+            }
+        }
+    ]
+}

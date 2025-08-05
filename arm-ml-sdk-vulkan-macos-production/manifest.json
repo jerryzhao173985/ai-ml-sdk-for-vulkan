@@ -1,0 +1,38 @@
+{
+    "name": "arm-ml-sdk-vulkan-macos",
+    "version": "1.0.0-production",
+    "platform": "darwin-arm64",
+    "build_date": "2025-08-05",
+    "components": {
+        "scenario_runner": {
+            "version": "197a36e",
+            "path": "bin/scenario-runner"
+        },
+        "vgf_library": {
+            "version": "f90fe30",
+            "path": "lib/libvgf.a"
+        },
+        "spirv_tools": {
+            "version": "v2025.3.rc1-36",
+            "path": "lib/"
+        }
+    },
+    "models": [
+        "la_muse.tflite",
+        "udnie.tflite",
+        "wave_crop.tflite",
+        "mirror.tflite",
+        "des_glaneuses.tflite"
+    ],
+    "features": {
+        "fp16_support": true,
+        "simd_groups": true,
+        "unified_memory": true,
+        "metal_interop": false
+    },
+    "requirements": {
+        "os": "macOS 11.0+",
+        "arch": "arm64",
+        "vulkan": "1.3+"
+    }
+}

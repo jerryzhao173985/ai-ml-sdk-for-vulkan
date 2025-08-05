@@ -1,0 +1,28 @@
+--- a/scripts/build.py
++++ b/scripts/build.py
+@@ -54,11 +54,15 @@ class Builder:
+     def setup_platform_build(self, cmake_cmd):
+         if self.target_platform == "host":
+             system = platform.system()
++            # Allow macOS builds
+             if system == "Linux":
+                 cmake_cmd.append(
+                     f"-DCMAKE_TOOLCHAIN_FILE={CMAKE_TOOLCHAIN_PATH / 'linux-gcc.cmake'}"
+                 )
+                 return True
++            if system == "Darwin":
++                # Use default CMake toolchain for macOS
++                return True
+ 
+             if system == "Windows":
+                 cmake_cmd.append(
+@@ -67,7 +71,8 @@ class Builder:
+                 cmake_cmd.append("-DMSVC=ON")
+                 return True
+ 
+-            print(f"Unsupported host platform {system}", file=sys.stderr)
++            # Fallback for other platforms
++            print(f"Warning: Platform {system} may have limited support", file=sys.stderr)
+             return False
+ 
+         if self.target_platform == "aarch64":

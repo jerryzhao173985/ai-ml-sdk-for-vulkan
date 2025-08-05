@@ -1,0 +1,1 @@
+/Users/jerry/lpclaude/claude_directives/CLAUDE_global_directives.md
