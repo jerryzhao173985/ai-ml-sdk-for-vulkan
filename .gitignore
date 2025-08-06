@@ -225,3 +225,4 @@ test/output/
 dependencies/
 sw/
 test/
+build-complete/
